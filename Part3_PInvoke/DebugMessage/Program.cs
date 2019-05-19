@@ -6,7 +6,8 @@ namespace DebugMessage
     {
         static void Main(string[] args)
         {
-            Debug.Write("Hello P/Invoke!");
+            var writer = new DebugWriter();
+            writer.Write(args[0]);
         }
     }
 }

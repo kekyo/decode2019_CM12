@@ -3,8 +3,9 @@
 このリポジトリは、2019年5月に東京で開催される[「de:code 2019」](https://www.microsoft.com/ja-jp/events/decode/2019/default.aspx)のセッション[「CM12: .NET Core マルチプラットフォームの本質」](https://www.microsoft.com/ja-jp/events/decode/2019session/detail.aspx?sid=CM12)に対応するサンプルコードと解説を公開しています。
 
 * 本記事はKouji Matsuiが独自に構成、執筆したものであり、[「Microsoft MVPパーソナルスポンサー」](https://www.microsoft.com/ja-jp/events/decode/2019/sponsor.aspx)として提供するものです。de:code 2019のオフィシャルドキュメントではありません。
-* 本記事執筆時には、セッションの概要のみ公開されているため、内容が密接に連携しない場合があります。
-* ライセンスは外部参照を除き、MITとします。
+* 本記事執筆時には、セッションの概要のみ公開されているため、内容が密接に連携しない場合があります。また、内容は、原稿執筆時の情報によります。
+* ライセンスは外部参照を除き、MITとします。コードにはいかなる保証もありません。ご自身のプロジェクトに適用する場合は、各自の判断で行ってください。
+* サンプルコードの開発検証環境は、Visual Studio 2017 (15.9.11)です。2019でも動作すると思われますが未確認です。また、Linux環境はWSL1のUbuntu 18.04 + dotnet-sdk-2.2 (2.2.204-1)で検証しました。
 
 # 概要
 
@@ -76,7 +77,7 @@ WPFの実行結果:
 
 もちろん、参照アセンブリと異なるメタデータを持っていた場合(例えば、とあるクラスのメソッドの引数の型が違っているなど)は、実行時に[MissingMethodException](https://docs.microsoft.com/ja-jp/dotnet/api/system.missingmethodexception)などの例外が発生する可能性があります。
 
-[BaitAndSwitchプロジェクト](Part2_BaitAndSwitch)は、最初の計算アプリケーションをBait and switchを使って実装したものです:
+[BaitAndSwitchプロジェクト](Part2_BaitAndSwitch)は、最初の計算アプリケーションをBait and switchテクニックを使って実装したものです:
 
 * 参照アセンブリとして、[Host.Referenceプロジェクト](Part2_BaitAndSwitch/Host.Reference/Interaction.cs)を用意する。実装は空で、クラスとメソッドが定義されているだけである。
 * 上記参照アセンブリの定義と同一だが、それぞれコンソールとWPFに対応する実装を含んだ、[Host.Consoleプロジェクト](Part2_BaitAndSwitch/Host.Console/Interaction.cs)と[Host.Wpfプロジェクト](Part2_BaitAndSwitch/Host.Wpf/Interaction.cs)を用意する(アセンブリのファイル名はすべて同一で、Host.Core.dll)。
@@ -107,26 +108,12 @@ P/InvokeはCLRに組み込まれている、ネイティブコードライブラ
 ```csharp
 public static class Program
 {
-    private const uint STD_OUTPUT_HANDLE = (uint)-11;
+    // Win32デバッグメッセージ出力API
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode)]
+    private static extern void OutputDebugString(string lpOutputString);
 
-    // Win32 API GetStdHandle()
-    [DllImport("kernel32.dll")]
-    private static extern IntPtr GetStdHandle(uint nStdHandle);
-    // Win32 API WriteFile()
-    [DllImport("kernel32.dll")]
-    private static extern bool WriteFile(
-        IntPtr hFile, byte[] lpBuffer,
-        uint nNumberOfBytesToWrite, out uint lpNumberOfBytesWritten,
-        IntPtr lpOverlapped);
-
-    public static void Main(string[] args)
-    {
-        var messageBody = Encoding.Default.GetBytes("Hello P/Invoke!\r\n");
-
-        // Invoke Win32 API directly from .NET world.
-        var stdout = GetStdHandle(STD_OUTPUT_HANDLE);
-        WriteFile(stdout, messageBody, messageBody.Length, out var written, IntPtr.Zero);
-    }
+    public static void Main(string[] args) =>
+        OutputDebugString("Hello P/Invoke!");
 }
 ```
 
@@ -136,7 +123,7 @@ public static class Program
 
 [PInvokeプロジェクト](Part3_PInvoke)は、これまでの説明を踏まえた、マルチプラットフォームアプリケーションです:
 
-* Bait and switchテクニックで環境を切り替える。
+* Bait and switchテクニックで、WindowsとLinux環境を切り替える。
 * コマンドライン引数に指定した文字列が、デバッグメッセージとしてシステムに送信される。
 * デバッグメッセージは以下のように処理される:
   * Windows環境の場合、Win32のOutputDebugString APIを使用して出力する。これは[SysinternalsのDebugViewユーティリティ](https://docs.microsoft.com/en-us/sysinternals/downloads/debugview)で確認できるほか、各種デバッガがアタッチされていれば、デバッガ上で確認できる。
@@ -145,6 +132,14 @@ public static class Program
 注意: この程度の規模であれば、Bait and switchテクニックを使用する理由は全くありません。ここでは、後述のランタイムサイドに話をつなげるため、あえてBait and switchで実装を行っています。
 
 DebugMessageプロジェクトは、DebugMessage.Referenceの参照アセンブリを使ってビルドします。実際に必要なのは、それぞれの環境のアセンブリDebugMessage.Win32とDebugMessage.Linuxです。前節のサンプルと同じく、これらを実行時に置き換える必要があります。
+
+以下はWindows環境でWin32.batを実行したときの、DebugViewユーティリティの出力です:
+
+![Part3_DebugMessage1](images/Part3_DebugMessage1.png)
+
+以下はWSL1のUbunt 18.04環境でlinux.shを実行したときの、`/var/log/syslog`の出力です (あらかじめ`service rsyslog start`でrsyslogを動かしておく必要があります):
+
+![Part3_DebugMessage2](images/Part3_DebugMessage2.png)
 
 ## P/Invoke DLL連携の詳細
 

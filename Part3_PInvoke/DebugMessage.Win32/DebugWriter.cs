@@ -5,7 +5,7 @@ namespace DebugMessage
     /// <summary>
     /// デバッグ出力用のクラスです。
     /// </summary>
-    public static class Debug
+    public class DebugWriter
     {
         [DllImport("kernel32.dll", CharSet=CharSet.Unicode)]
         private static extern void OutputDebugString(string lpOutputString);
@@ -14,7 +14,7 @@ namespace DebugMessage
         /// デバッグ出力を実行します。
         /// </summary>
         /// <param name="message">デバッグメッセージ</param>
-        public static void Write(string message) =>
+        public void Write(string message) =>
             OutputDebugString(message);
     }
 }
