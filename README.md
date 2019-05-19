@@ -14,9 +14,9 @@
 * マネージドサイド
   * インターフェイス分離
   * Bait and switchテクニック
-* アンマネージド連携
+* アンマネージ連携
   * P/Invoke
-  * P/Invoke DLL連携の詳細
+  * ガベージコレクションの影響
 * ランタイムサイド
   * FCall
   * QCall
@@ -97,7 +97,7 @@ Bait and switchテクニックは、インターフェイス分離とよく似�
 
 かつてのPortable Class Libraryは、Bait and switch手法で互換性を実現しました。ここまでの解説で、PCLが何十というプロファイルを持っていたことを考えると、問題が発生しないように保守することがいかに困難であったかが想像出来ます。
 
-# アンマネージド連携
+# アンマネージ連携
 
 P/Invokeは.NETのアンマネージドコード連携の手段の一つです。もう一つはCOM連携ですが、本稿では割愛します。
 
@@ -141,10 +141,76 @@ DebugMessageプロジェクトは、DebugMessage.Referenceの参照アセンブ�
 
 ![Part3_DebugMessage2](images/Part3_DebugMessage2.png)
 
-## P/Invoke DLL連携の詳細
+## ガベージコレクションの影響
 
+P/Invokeを初めて使う場合、ネイティブコードを実行している場合の.NETインスタンスがどのように扱われるのか、疑問に思う方も居ると思います。具体的には、.NETで生成したインスタンスをP/Invokeを通じて渡した場合、ガベージコレクタが意図せず回収してしまうことは無いのか、という点です。
 
+例えば、以下の疑似コード:
 
+```csharp
+// foo.dll内のReadToBuffer APIを呼び出す
+// extern "C" void ReadToBuffer(uint8_t* pBuffer, int32_t size);
+[DllImport("foo.dll")]
+private static extern void ReadToBuffer(byte[] buffer, int size);
+
+public void Read()
+{
+    var buffer = new byte[100];
+
+    // byte配列は自動的にマーシャリングされる。
+    // API呼び出し中にbufferがGCによって回収されることは無いのか？
+    ReadToBuffer(buffer, buffer.Length);
+
+    // (A)
+}
+```
+
+ガベージコレクタは、ローカル変数やフィールドなどからインスタンスが参照されているかどうかを追跡しています。このような状況では、bufferのインスタンスが回収されてしまうことはありません。APIが実行を終えて戻ってきたとき(A)、bufferにアクセスできなければならない(ローカル変数がまだ有効)ため、とも言えます。
+
+[GCHandle構造体](https://docs.microsoft.com/ja-jp/dotnet/api/system.runtime.interopservices.gchandle)を使用すると、インスタンスへの生のポインタを取得できます。例えば:
+
+```csharp
+// foo.dll内のReadToBuffer APIを呼び出す
+// extern "C" void ReadToBuffer(uint8_t* pBuffer, int32_t size);
+[DllImport("foo.dll")]
+private static extern void ReadToBuffer(IntPtr buffer, int size);
+
+public void Read()
+{
+    var buffer = new byte[100];
+
+    // GCHandleを使って生のポインタを得る(手動マーシャリング)
+    // 生のポインタを得るには、アドレスが固定されなければならない(Pinned)。
+    var bufferHandle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+    var pBuffer = bufferHandle.AddrOfPinnedObject();
+
+    // API呼び出し中にbufferがGCによって回収されることは無いのか？
+    ReadToBuffer(pBuffer, buffer.Length);
+
+    // (A)
+
+    // 不要になったら解放する必要がある。忘れた場合はメモリリークする。
+    bufferHandle.Free();
+}
+```
+
+このコードは、先程の例とほぼ同じです。P/Invoke呼び出しのためのポインタへのマーシャリングを自動で行うか、手動で行うかの違いです。
+
+|手法|メリット|デメリット|
+|:---|:---|:---|
+|自動|安全で簡潔に記述できる|マーシャリングのタイミングをコントロールできないため、パフォーマンスの問題につながることがある|
+|手動|マーシャリングのタイミングをコントロールできるため、パフォーマンスを最大化出来る|ガベージコレクタに誤って解放されたり、メモリリークしないように注意を払う必要がある|
+
+[Marshalingプロジェクト](Part4_Marshaling)は、実際に動作するマーシャリングの例です:
+
+* このプロジェクトは、[GCHandle.Allocメソッドの例](https://docs.microsoft.com/ja-jp/dotnet/api/system.runtime.interopservices.gchandle.alloc)を再構成したものです。
+* EnumWindows APIを使用して、すべてのウインドウのタイトル文字列を列挙します。
+* 自動マーシャリングと手動マーシャリングの例を示します。
+
+ここでは、マネージド環境とアンマネージ環境との境界を行き来する際に、暗黙または意図して注意する必要のある事項をまとめます:
+
+* マーシャリングを自動で行うのか、手動で行うのか、及びパフォーマンスへの影響。
+* ガベージコレクタによって意図せずインスタンスが解放されないようにする、あるいは正しく解放されるようにする。
 
 # ランタイムサイド
 
