@@ -92,9 +92,9 @@ Bait and switchテクニックは、インターフェイス分離とよく似�
 |手法|メリット|デメリット|
 |:---|:---|:---|
 |インターフェイス分離|誰でもリスクなしで使用できる|初めから使用する前提で設計する必要がある|
-|Bait and switch|後から依存性の分離を行うことができる|メタデータを一致させるなど、保守にコストがかかる|
+|Bait and switch|後から依存性の分離を行うことができる|メタデータの不一致による障害がコントロールしにくいため慎重を要する|
 
-かつてのPortable Class Libraryはこの手法で互換性を実現しました。ここまでの解説で、PCLが何十というプロファイルを持っていたことを考えると、PCL参照アセンブリを問題が発生しないように保守することが、いかに困難であったかが想像出来ます。
+かつてのPortable Class Libraryは、Bait and switch手法で互換性を実現しました。ここまでの解説で、PCLが何十というプロファイルを持っていたことを考えると、問題が発生しないように保守することがいかに困難であったかが想像出来ます。
 
 # アンマネージド連携
 
@@ -102,7 +102,7 @@ P/Invokeは.NETのアンマネージドコード連携の手段の一つです�
 
 ## P/Invoke
 
-P/Invokeは.NET CLRに組み込まれている、ネイティブコードライブラリとの連携機能です。また、C#などの.NETコードからこれを簡単に利用できるようにしています。例えば、以下のコードは、C#から直にWin32 APIを呼び出します:
+P/InvokeはCLRに組み込まれている、ネイティブコードライブラリとの連携機能です。また、C#などの.NETコードからこれを簡単に利用できるようにしています。例えば、以下のコードは、C#から直にWin32 APIを呼び出します:
 
 ```csharp
 public static class Program
@@ -115,7 +115,9 @@ public static class Program
     // Win32 API WriteFile()
     [DllImport("kernel32.dll")]
     private static extern bool WriteFile(
-        IntPtr hFile, byte[] lpBuffer, uint nNumberOfBytesToWrite, out uint lpNumberOfBytesWritten, IntPtr lpOverlapped);
+        IntPtr hFile, byte[] lpBuffer,
+        uint nNumberOfBytesToWrite, out uint lpNumberOfBytesWritten,
+        IntPtr lpOverlapped);
 
     public static void Main(string[] args)
     {
@@ -131,6 +133,18 @@ public static class Program
 ネイティブコードのライブラリがダイナミックリンクライブラリとして用意されていれば、全く同じ手法でコードを記述することが出来ます。LinuxやMacOSといったプラットフォーム向けのコードは、それぞれで要求されるネイティブコードライブラリが異なることが多々ありますが、P/Invokeの使用方法は同じです。.NET Coreやmono向けのライブラリも、同じように作ることができます。
 
 前節で述べた、インターフェイス分離設計やBait and switchテクニックをP/Invokeと組み合わせると、.NETでマルチプラットフォームの一貫したライブラリ設計を行うことができます。つまり、前節においてのプラットフォーム依存コードの部分をP/Invokeを使って実装すれば、そのプラットフォームで求められる固有のAPIがネイティブコードであったとしても、共通のインターフェイス型や共通のメタデータを持つBait and switch用アセンブリを構築することで、プラットフォーム依存を分離することができます。
+
+[PInvokeプロジェクト](Part3_PInvoke)は、これまでの説明を踏まえた、マルチプラットフォームアプリケーションです:
+
+* Bait and switchテクニックで環境を切り替える。
+* コマンドライン引数に指定した文字列が、デバッグメッセージとしてシステムに送信される。
+* デバッグメッセージは以下のように処理される:
+  * Windows環境の場合、Win32のOutputDebugString APIを使用して出力する。これは[SysinternalsのDebugViewユーティリティ](https://docs.microsoft.com/en-us/sysinternals/downloads/debugview)で確認できるほか、各種デバッガがアタッチされていれば、デバッガ上で確認できる。
+  * Linux環境の場合、syslog APIを使用して出力する。
+
+注意: この程度の規模であれば、Bait and switchテクニックを使用する理由は全くありません。ここでは、後述のランタイムサイドに話をつなげるため、あえてBait and switchで実装を行っています。
+
+DebugMessageプロジェクトは、DebugMessage.Referenceの参照アセンブリを使ってビルドします。実際に必要なのは、それぞれの環境のアセンブリDebugMessage.Win32とDebugMessage.Linuxです。前節のサンプルと同じく、これらを実行時に置き換える必要があります。
 
 ## P/Invoke DLL連携の詳細
 

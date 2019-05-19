@@ -1,10 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-      <AssemblyName>Host.Core</AssemblyName>
       <OutputType>Library</OutputType>
       <TargetFramework>net45</TargetFramework>
       <LangVersion>7.2</LangVersion>
+      <AssemblyName>Host.Core</AssemblyName>
+      <RootNamespace>Host.Core</RootNamespace>
   </PropertyGroup>
 
 </Project>
