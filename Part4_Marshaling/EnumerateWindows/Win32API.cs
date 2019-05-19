@@ -57,6 +57,7 @@ namespace EnumerateWindows
                 // EnumWindows APIを実行する。パラメータにはハンドル値を渡す。
                 //   EnumWindowsCallbackは、暗黙デリゲート-->関数ポインタ、として自動マーシャリングされている。
                 //   (暗黙に生成されている)デリゲートはGCが追跡できるので、意図せず解放される問題はない。
+                //   デリゲートを一旦ローカル変数に入れても同じ結果となる。
                 EnumWindows(EnumWindowsCallback, actionHandlePtr);
             }
             finally
