@@ -26,6 +26,7 @@ namespace DebugMessage
         /// <param name="message">デバッグメッセージ</param>
         public void Write(string message)
         {
+            // syslogに出力する
             openlog("DebugMessage", LOG_PID, LOG_USER);
             syslog(LOG_DEBUG, message);
             closelog();
