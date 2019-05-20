@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
@@ -44,39 +45,42 @@ namespace Calculator
                         break;
                     }
 
-                    var tokens = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    var tokens = new Queue<string>(line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries));
 
                     try
                     {
-                        var value0 = double.Parse(tokens[0]);
-                        var oper = tokens[1];
-                        var value1 = double.Parse(tokens[2]);
+                        var lhs = double.Parse(tokens.Dequeue());
 
-                        double result;
-                        switch (oper)
+                        while (tokens.Count >= 1)
                         {
-                            case "+":
-                                result = value0 + value1;
-                                break;
-                            case "-":
-                                result = value0 - value1;
-                                break;
-                            case "*":
-                                result = value0 * value1;
-                                break;
-                            case "/":
-                                result = value0 / value1;
-                                break;
-                            case "%":
-                                result = value0 % value1;
-                                break;
-                            default:
-                                throw new ArgumentException("Unknown operator", oper);
+                            var oper = tokens.Dequeue();
+                            var rhs = double.Parse(tokens.Dequeue());
+
+                            switch (oper)
+                            {
+                                case "+":
+                                    lhs += rhs;
+                                    break;
+                                case "-":
+                                    lhs -= rhs;
+                                    break;
+                                case "*":
+                                    lhs *= rhs;
+                                    break;
+                                case "/":
+                                    lhs /= rhs;
+                                    break;
+                                case "%":
+                                    lhs %= rhs;
+                                    break;
+                                default:
+                                    throw new ArgumentException("Unknown operator", oper);
+                            }
                         }
 
                         await interaction.WriteLineAsync(
                             "Result={0}",
-                            result);
+                            lhs);
                     }
                     catch (Exception ex)
                     {

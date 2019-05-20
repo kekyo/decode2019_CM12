@@ -34,7 +34,7 @@
 
 インターフェイス分離は最も基本的なテクニックです。.NETのインターフェイス型を使用して、異なる実装の詳細を、同一の(広義の)インターフェイスで分離する事により、それぞれをマルチプラットフォームに対応した処理として共通に扱えるようにします。
 
-[SeparatesByInterfaceTypeプロジェクト](Part1_SeparatesByInterfaceType)は、以下の機能を持ちます:
+[Part1_SplitByInterfaceプロジェクト](Part1_SplitByInterface)は、以下の機能を持ちます:
 
 * 複数の値を入力すると、計算結果が出力される。
 * 入出力の対象は、コンソール(コマンドライン)と、GUI(WPF)である。
@@ -82,7 +82,7 @@ WpfCalculatorの実行結果:
 
 もちろん、参照アセンブリと異なるメタデータを持っていた場合(例えば、とあるクラスのメソッドの引数の型が違っているなど)は、実行時に[MissingMethodException](https://docs.microsoft.com/ja-jp/dotnet/api/system.missingmethodexception)などの例外が発生する可能性があります。
 
-[BaitAndSwitchプロジェクト](Part2_BaitAndSwitch)は、最初の計算アプリケーションをBait and switchテクニックを使って実装したものです:
+[Part2_BaitAndSwitchプロジェクト](Part2_BaitAndSwitch)は、最初の計算アプリケーションをBait and switchテクニックを使って実装したものです:
 
 * 参照アセンブリとして、[Host.Referenceプロジェクト](Part2_BaitAndSwitch/Host.Reference/Interaction.cs)を用意する。実装は空で、クラスとメソッドが定義されているだけである。
 * 上記参照アセンブリの定義と同一だが、それぞれコンソールとWPFに対応する実装を含んだ、[Host.Consoleプロジェクト](Part2_BaitAndSwitch/Host.Console/Interaction.cs)と[Host.Wpfプロジェクト](Part2_BaitAndSwitch/Host.Wpf/Interaction.cs)を用意する(アセンブリのファイル名はすべて同一で、Host.Core.dll)。
@@ -126,7 +126,7 @@ public static class Program
 
 前節で述べた、インターフェイス分離設計やBait and switchテクニックをP/Invokeと組み合わせると、.NETでマルチプラットフォームの一貫したライブラリ設計を行うことができます。つまり、前節の依存コードの部分をP/Invokeを使って実装すれば、そのプラットフォーム固有のAPIがネイティブコードであったとしても、共通のインターフェイス型や共通のメタデータを持つBait and switch用アセンブリを構築することで、プラットフォーム依存を分離することができます。
 
-[PInvokeプロジェクト](Part3_PInvoke)は、これまでの説明を踏まえた、マルチプラットフォームアプリケーションです:
+[Part3_PInvokeプロジェクト](Part3_PInvoke)は、これまでの説明を踏まえた、マルチプラットフォームアプリケーションです:
 
 * Bait and switchテクニックで、WindowsとLinux環境を切り替える。
 * コマンドライン引数に指定した文字列が、デバッグメッセージとしてシステムに送信される。
@@ -211,7 +211,7 @@ public void Read()
 
 例えばバッファへのポインタが頻繁に必要になる場合、自動マーシャリングするよりも、一度だけ手動マーシャリングして連続してポインタを使用し、最後に手動で解放したほうが効率的かもしれません。
 
-[Marshalingプロジェクト](Part4_Marshaling)は、実際に動作するマーシャリング処理の例です:
+[Part4_Marshalingプロジェクト](Part4_Marshaling)は、実際に動作するマーシャリング処理の例です:
 
 * このプロジェクトは、[GCHandle.Allocメソッドの例](https://docs.microsoft.com/ja-jp/dotnet/api/system.runtime.interopservices.gchandle.alloc)を再構成したものです。
 * EnumWindows APIを使用して、すべてのウインドウのタイトル文字列を列挙します。
