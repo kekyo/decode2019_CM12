@@ -14,6 +14,7 @@ namespace Host.Core
         public void Dispose()
         {
             // Bait and switchのビルド用ライブラリなので、実装は存在しない
+            throw new NotImplementedException();
         }
 
         /// <summary>
@@ -25,7 +26,7 @@ namespace Host.Core
         public Task<string> ReadLineAsync()
         {
             // Bait and switchのビルド用ライブラリなので、実装は存在しない
-            return null;
+            throw new NotImplementedException();
         }
 
         /// <summary>
@@ -35,7 +36,7 @@ namespace Host.Core
         public Task WriteLineAsync(string format, params object[] args)
         {
             // Bait and switchのビルド用ライブラリなので、実装は存在しない
-            return null;
+            throw new NotImplementedException();
         }
     }
 }

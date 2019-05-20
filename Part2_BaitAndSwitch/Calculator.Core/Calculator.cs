@@ -21,6 +21,15 @@ namespace Calculator
             // 入出力を司るInteractionクラスを生成する
             using (var interaction = new Interaction())
             {
+                await interaction.WriteLineAsync(
+                    "Simple calculator - de:code 2019 CM12 Part2_BaitAndSwitch sample.");
+                await interaction.WriteLineAsync(
+                    "See https://github.com/kekyo/decode2019_CM12");
+                await interaction.WriteLineAsync(
+                    "Exit app    : exit");
+                await interaction.WriteLineAsync(
+                    "For example : 1 + 2 * 3");
+
                 while (true)
                 {
                     var line = await interaction.ReadLineAsync();

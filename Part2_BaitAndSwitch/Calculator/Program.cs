@@ -1,31 +1,40 @@
 ﻿using System;
 using System.Threading.Tasks;
 
+using Host.Core;
+
 namespace Calculator
 {
-    public class Program
+    public static class Program
     {
+        /// <summary>
+        /// メインエントリポイントです。
+        /// </summary>
+        /// <param name="args">コマンドライン引数</param>
+        /// <returns>戻り値</returns>
         [STAThread]
-        public static void Main(string[] args)
+        public static int Main(string[] args)
         {
-            // 通常、Windows FormsやWPFでは、メインスレッドがSTAであることを要求するため、
-            // STAThread属性を適用します。
-            // このアセンブリでは、MainメソッドがWPFに一切依存しないものの、非同期処理前提としているため、
-            // STAThread属性を適用しても、その後Task.Wait()を実行するとデッドロックを起こします。
-            // したがって、ここで手動でメッセージポンプを回します。
+            // メモ: Host.Referenceのプラットフォーム実装は、メインスレッドがSTAに属していることを期待する場合がある。
+            //   本サンプルコードにおいては、Bait and switchで置き換えられたアセンブリがHost.Wpfの場合に該当する。
+            //   そのため、メインメソッドは常にSTAThread属性で修飾しておく必要がある。
+            //   Host.Consoleの場合、STAに属している必要はないが、属していても実害はない。
 
-            // MainAsyncが非同期的に完了した場合にメッセージループを終了させる
-            MainAsync(args).
-                ContinueWith(_ => Application.Exit());
-
-            // メッセージループを実行する
-            Application.Run();
+            // 非同期メインメソッドを実行する
+            var application = new Application();
+            return application.Run(MainAsync(args));
         }
 
-        public static Task MainAsync(string[] args)
+        /// <summary>
+        /// 非同期メインメソッドです。
+        /// </summary>
+        /// <param name="args">コマンドライン引数</param>
+        /// <returns>戻り値</returns>
+        private static async Task<int> MainAsync(string[] args)
         {
             // 計算を実行する
-            return CalculatorImplementation.CalculateAsync();
+            await CalculatorImplementation.CalculateAsync();
+            return 0;
         }
     }
 }
