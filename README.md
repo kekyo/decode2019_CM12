@@ -187,11 +187,11 @@ public void Read()
     // GCHandleを使って生のポインタを得る(手動マーシャリング)
     // 生のポインタを得るには、アドレスが固定されなければならない(Pinned)
     var bufferHandle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
-    var pBuffer = bufferHandle.AddrOfPinnedObject();
 
     try
     {
         // pBufferは配列の先頭を示す、本物のアドレス
+        var pBuffer = bufferHandle.AddrOfPinnedObject();
         ReadToBuffer(pBuffer, buffer.Length);
     }
     finally
@@ -213,11 +213,14 @@ public void Read()
 
 [Part4_Marshalingプロジェクト](Part4_Marshaling)は、実際に動作するマーシャリング処理の例です:
 
-* このプロジェクトは、[GCHandle.Allocメソッドの例](https://docs.microsoft.com/ja-jp/dotnet/api/system.runtime.interopservices.gchandle.alloc)を再構成したものです。
-* EnumWindows APIを使用して、すべてのウインドウのタイトル文字列を列挙します。
-* 自動マーシャリングと手動マーシャリングの例を示します。
+* Win32NativeLibraryプロジェクトは、Visual C++のネイティブプロジェクトで、GenerateData APIを公開します。GenerateData APIは指定されたバッファアドレスに、数列を書き込みます。
+* BothMarshalingTypesプロジェクトから、P/InvokeでGenerateData APIを呼び出します。
+* この呼び出しの、自動マーシャリングと手動マーシャリングの例を示します。
+* 両者の処理時間差を、簡易的に計測します。具体的な結果は、環境に依存するためここでは示しませんが、自動マーシャリング > 手動マーシャリング、となっている事を確かめることが出来ると思います。
 
-以下に、マネージド環境とアンマネージ環境との境界を行き来する際に、暗黙または意図して注意する必要のある事項をまとめます:
+この例では、非常に単純な数列をマネージドの世界に引き込みますが、実際のマーシャリングシナリオはもっと複雑です。場合によっては、手動マーシャリングを行わないと、現実的なパフォーマンスを引き出せない可能性があります。マーシャリングの詳細については、[「プラットフォーム呼び出しによるデータのマーシャリング」](https://docs.microsoft.com/ja-jp/dotnet/framework/interop/marshaling-data-with-platform-invoke)を参照してください。
+
+以下に、P/Invokeを使用する際に、暗黙または意図して注意する必要のある事項をまとめます:
 
 * マーシャリングを自動で行うのか、手動で行うのか、及びパフォーマンスへの影響。
 * ガベージコレクタによって意図せずインスタンスが解放されないようにする、あるいは正しく解放されるようにする。

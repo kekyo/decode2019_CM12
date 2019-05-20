@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>netcoreapp2.0</TargetFramework>
+        <Platforms>x86;x64</Platforms>
+    </PropertyGroup>
+
+    <ItemGroup Condition="'$(Platform)'=='x86'">
+        <None Include="..\Win32\$(Configuration)\Win32NativeLibrary.dll" Link="Win32NativeLibrary.dll">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="..\Win32\$(Configuration)\Win32NativeLibrary.pdb" Link="Win32NativeLibrary.pdb">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+    <ItemGroup Condition="'$(Platform)'!='x86'">
+        <None Include="..\$(Platform)\$(Configuration)\Win32NativeLibrary.dll" Link="Win32NativeLibrary.dll">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Include="..\$(Platform)\$(Configuration)\Win32NativeLibrary.pdb" Link="Win32NativeLibrary.pdb">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+
+</Project>
