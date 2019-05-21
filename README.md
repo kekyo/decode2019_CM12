@@ -23,8 +23,7 @@
   * ガベージコレクションの影響
 * ランタイムサイド
   * System.Private.CoreLib
-  * FCall
-  * QCall
+  * ランタイム呼び出しの手段
 
 # マネージドサイド
 
@@ -232,20 +231,226 @@ public void Read()
 
 ここまでは、一般の開発者がマルチプラットフォーム対応アプリケーションを設計する場合において考慮すべき点を、如何に依存コードを分離して実現するか、という視点で解説しました。
 
-この節では、.NET自身が、マルチプラットフォーム対応するためにどのような道具を使用しているのかを述べます。つまり、.NET Coreにおいて、coreclrやcorefxがどのようにマルチプラットフォームを実現しているのかという点に注目します。
+この節では、.NET自身が、マルチプラットフォーム対応するためにどのような手段を使用しているのかを述べます。つまり、.NET Coreにおいて、coreclrやcorefxがどのようにマルチプラットフォームを実現しているのかという点に注目します。
 
-基本的に、今まで述べてきたテクニックが利用できる部分では、そのまま利用できます。例えば、
-
-TODO:
+基本的に、今まで述べてきたテクニックが利用できる部分では、そのまま利用できます。例えば、System.IO.FileStreamクラスの実装は、WindowsとLinuxで異なるAPIを使用しますが、インターフェイスで分離されているわけではないため、Bait and switchを利用して切り分けていると想像出来ます。
 
 ## System.Private.CoreLib
 
-TODO:
+かつて、.NET Frameworkでは、[BCL (Base class library)](https://docs.microsoft.com/ja-jp/dotnet/standard/framework-libraries#base-class-libraries)を、「mscorlib.dll」という単一のアセンブリで担っていました。monoはBait and switchの手法(但し、中身が空の参照アセンブリは存在しなかった)で、mscorlib.dllという同じ名前のアセンブリを使いつつ、中身はLinux等の異なるOSで動作する、別のアセンブリをロードすることで、マルチプラットフォーム動作を実現していました。
 
-## FCall
+.NET Core 1.0のリリースにあたり、巨大化してしまったmscorlib.dllを分割するために、前節で例示した「System.Runtime.dll」と「System.Private.CoreLib.dll」、その他の細かいアセンブリ群に細分化しました。特に、.NET CoreCLRランタイムと密接に絡む実装が含まれるアセンブリが、System.Private.CoreLibアセンブリです。
 
-TODO:
+![Part5_Diagram1](images/Part5_Diagram1.png)
 
-## QCall
+この図は、Part1_SplitByInterfaceプロジェクトのCalculator.Core.dllをILSpyで確認したものです。左上がCalculator.Coreアセンブリで、netstandardアセンブリに依存しています。netstandardアセンブリはかなり多くのアセンブリに依存していますが、その中にSystem.Runtimeアセンブリが存在します。
+
+System.RuntimeアセンブリはSystem.Private.CoreLibアセンブリに依存し、ここから先に依存する.NETのアセンブリはありません。そして、System名前空間を確認すると、見慣れた`Array`,`Boolean`,`Byte`,`Char`といった型が定義されていることがわかります。
+
+System.Private.CoreLibアセンブリ内には、かなり多くのクラスや構造体が定義されています。これらの型のメソッドは、そのプラットフォームに依存した処理が実装されているはずです。例として、`System.Diagnostics.Debug`クラスを追ってみましょう:
+
+### Debug.Write(string)
+
+```csharp
+internal static Action<string> s_WriteCore = WriteCore;
+
+public static void Write(string message)
+{
+    lock (s_lock)
+    {
+        if (message == null)
+        {
+            // 空文字を出力
+            s_WriteCore(string.Empty);
+        }
+        else
+        {
+            if (s_needIndent)
+            {
+                message = GetIndentString() + message;
+                s_needIndent = false;
+            }
+            // 引数の文字列を出力
+            s_WriteCore(message);
+            if (message.EndsWith(Environment.NewLine))
+            {
+                s_needIndent = true;
+            }
+        }
+    }
+}
+```
+
+付加機能のためのコードが前後にありますが、結局`s_WriteCore(message)`でメッセージを出力しているようです。このフィールドはActionデリゲートで、初期化時には`WriteCore(string)`メソッドを指しています。
+
+### Debug.WriteCore(string)
+
+```csharp
+private static void WriteCore(string message)
+{
+    lock (s_ForLock)
+    {
+        if (message == null || message.Length <= 4091)
+        {
+            WriteToDebugger(message);
+        }
+        else
+        {
+            int i;
+            for (i = 0; i < message.Length - 4091; i += 4091)
+            {
+                WriteToDebugger(message.Substring(i, 4091));
+            }
+            WriteToDebugger(message.Substring(i));
+        }
+    }
+}
+```
+
+引数のmessageを4091文字づつ分割して、`WriteToDebugger()`メソッドで出力しています。
+
+### Debug.WriteToDebugger(string)
+
+```csharp
+private static void WriteToDebugger(string message)
+{
+    if (Debugger.IsLogging())
+    {
+        Debugger.Log(0, null, message);
+    }
+    else
+    {
+        Interop.Kernel32.OutputDebugString(message ?? string.Empty);
+    }
+}
+```
+
+見慣れた`OutputDebugString`というシンボルが出てきました。
+
+### Interop.Kernel32.OutputDebugString(string)
+
+```csharp
+// Win32 API OutputDebugString
+[DllImport("kernel32.dll", CharSet = CharSet.Unicode, EntryPoint = "OutputDebugStringW", ExactSpelling = true)]
+internal static extern void OutputDebugString(string message);
+```
+
+これで、Windows環境のSystem.Private.CoreLibアセンブリには、Win32 APIに依存した実装が含まれていることが確認できました。Linux版.NET Core SDK 2.2のSystem.Private.CoreLibアセンブリをILSpyで見ると、以下のようになっていました:
+
+(/usr/share/dotnet/shared/Microsoft.NETCore.App/2.2.5/ 配下にあります。バージョンは各自の環境に合わせて読み替えて下さい)
+
+```csharp
+private static void WriteToDebugger(string message)
+{
+    if (Debugger.IsLogging())
+    {
+        Debugger.Log(0, null, message);
+    }
+    else
+    {
+        Interop.Sys.SysLog((Interop.Sys.SysLogPriority)15, "%s", message);
+    }
+}
+```
+
+```csharp
+[DllImport("System.Native", EntryPoint = "SystemNative_SysLog")]
+internal static extern void SysLog(SysLogPriority priority, string message, string arg1);
+```
+
+Windowsの方はWin32 APIを直接呼び出すようになっていましたが、Linuxの方は`System.Native`と付けられたネイティブライブラリの`SystemNative_SysLog`メソッドを呼び出しているようです。確認してみると、確かに存在します:
+
+![Part5_LinuxSystemNative](images/Part5_LinuxSystemNative.png)
+
+このネイティブライブラリを、「PAL (Platform abstraction layer)」と呼んでいます。歴史的に、Windowsへの実装が第一であったことからか、Win32 APIのインターフェイスを模すように作られているようです。
+
+### corefxの実装
+
+以上を踏まえて、ソースコードがどうなっているかを確認してみます。[System.Diagnostics.Debugクラスのコードはここにあります](https://github.com/dotnet/corefx/tree/master/src/Common/src/CoreLib/System/Diagnostics)。partial classで分割されていて、WriteToDebuggerメソッドの実装は、[`DebugProvider.Windows.cs`](https://github.com/dotnet/corefx/blob/b3ac650a36e2fa04988fb37c4a0a3195a9e2dc36/src/Common/src/CoreLib/System/Diagnostics/DebugProvider.Windows.cs#L77)と、[`DebugProvider.Unix.cs`](https://github.com/dotnet/corefx/blob/b3ac650a36e2fa04988fb37c4a0a3195a9e2dc36/src/Common/src/CoreLib/System/Diagnostics/DebugProvider.Unix.cs#L63)の2つのファイルに分割されています。おそらくビルド時に、Windows版とLinux版で使い分けるのでしょう。内容はILSpyで見たものと全く同じです。
+
+ところで、.NET CoreはLinuxだけではなく、FreeBSDもサポートしています。しかし、DebugProvider.Unix.csは名前の通り、Unix環境で共通に使われるようです。ここではこれ以上掘り下げませんが、LinuxとFreeBSDで実装に違いがあるとすれば、PALの方で吸収しているのではないかと思います。
+
+## ランタイム呼び出しの手段
+
+前節では、プラットフォームごとの実装を切り分けるのに、System.Private.CoreLibアセンブリを基準として、Bait and switchで実行アセンブリが差し替わっていることを確認しました。例としてDebugクラスの実装を追いましたが、そこでは普通にP/Invoke機能を使ってネイティブライブラリを呼び出していました:
+
+```csharp
+// Windows環境において、Win32 APIを呼び出す
+[DllImport("kernel32.dll", CharSet = CharSet.Unicode, EntryPoint = "OutputDebugStringW", ExactSpelling = true)]
+internal static extern void OutputDebugString(string message);
+
+// Linux(Unix)環境において、PALの実装を呼び出す
+[DllImport("System.Native", EntryPoint = "SystemNative_SysLog")]
+internal static extern void SysLog(SysLogPriority priority, string message, string arg1);
+```
+
+上のコードは、プラットフォーム毎に異なるネイティブAPIの呼び出しを実現するために、P/Invokeを使っています。しかし、.NET CLRの内部機能を呼び出す場合は、P/Invokeではなく、別の方法を使います。以下に、3種類の呼び出し方法`QCall`, `FCall`, `HCall`について示します。それぞれは異なる呼び出し方法で、目的によって使い分けられています。しかし、同じ機能を別の呼び出し方法で呼び出すことは出来ません。
+
+### QCall
+
+QCallは、P/Invokeにかなり似ています。P/Invokeで想定できるマーシャリングは、プリミティブ型であればそのまま使えます。文字列の場合は、LPCWSTR (const wchar_t*)を想定でき、文字列の返却にStringBuilderを使う必要がありません。それに加えてP/Invokeでは実現しない、ネイティブからの例外のスローが可能です。
+
+内部でQCall呼び出しをラップする、C#のメソッドの実装例を示します:
+
+```csharp
+// QCallでネイティブコードを呼び出すための宣言(P/Invokeと似ているが異なる。publicにはできない)
+[DllImport("QCall", CharSet = CharSet.Unicode)]
+private static extern bool Foo(int arg1, string arg2, System.Runtime.CompilerServices.StringHandleOnStack returnValue);
+
+// ラップして安全なメソッドとして公開
+public static string Foo(int arg1, string arg2)
+{
+    string returnValue = null;
+    if (!Foo(arg1, arg2, System.Runtime.CompilerServices.JitHelpers.GetStringHandle(ref retString)))
+    {
+        throw new InvalidOperationException("...");
+    }
+    return returnValue;
+}
+```
+
+第一に、QCallはP/Invokeと同じようにDllImport属性を使います。ライブラリ名は固定的に"QCall"を指定しておきます。ネイティブ側の実装は、マネージド側に値を渡したい場合(この例のように、戻り値として文字列を返す想定)は、スタック上のstring参照を追跡できるようにする`StringHandleOnStack`という型を使います。
+
+そもそもStringHandleOnStackや、そのインスタンスを取得する`JitHelpers`は公開されていません(確認する場合は、ILSpyで検索するのが便利です。[ソースコードはこちら](https://github.com/dotnet/coreclr/blob/master/src/System.Private.CoreLib/src/System/Runtime/CompilerServices/jithelpers.cs))。
+
+つまり、QCallを処理するメソッドは公開メソッドにはなり得ず、必ずSystem.Private.CoreLibアセンブリ内に閉じている必要があります。したがって、上記の例のように、QCallメソッドはprivateとし、間接的に安全に呼び出すpublicなメソッドを定義する必要があります。そして、当然ですが、QCallの対象となるネイティブメソッドの実装は、.NET Core CLR内部に用意しておく必要があります。
+
+仮に実装した場合、以下のような体裁を持ちます:
+
+```cpp
+// C++で記述する
+BOOL QCALLTYPE FooNative::Foo(int arg1, LPCWSTR arg2, QCall::StringHandleOnStack returnValue)
+{
+    // QCall呼び出しを処理可能にするためのマクロ
+    QCALL_CONTRACT;
+
+    // QCall処理中に発生する例外が正しく伝搬するようにするマクロ
+    BEGIN_QCALL;
+
+    if (arg1 >= 0)
+    {
+        // 例外をスローする
+        COMPlusThrow(kArgumentException, L"arg1");
+    }
+
+    // 文字列もC/C++で想定するように、普通に使える
+    // (つまり、文字列を示すポインタがGCによっていきなり移動したりしない。Pinned相当)
+    printf("%d, %S", arg1, arg2);
+
+    // 文字列への参照を、直接呼び出し元のスタックに設定できる
+    // (P/InvokeにおけるStringBuilderのようなオーバーヘッドはない)
+    returnValue.Set(L"Hello");
+
+    // QCallの後始末マクロ
+    END_QCALL;
+
+    // (BEGIN_QCALLからEND_QCALLまでの間で、returnすることは出来ない)
+    return TRUE;
+}
+```
+
+このメソッドを呼び出せるようにする(マネージド側のQCall宣言との結び付け)には、[ecalllist.hヘッダファイル](https://github.com/dotnet/coreclr/blob/master/src/vm/ecalllist.h)に対応を記述する必要があります。
+
+### FCall
 
 TODO:
