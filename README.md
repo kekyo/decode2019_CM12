@@ -29,7 +29,7 @@
   * ガベージコレクションの影響
 * ランタイムサイド
   * System.Private.CoreLib
-  * ランタイム呼び出しの手段
+  * ランタイム機能呼び出しの手段
 
 # マネージドサイド
 
@@ -399,7 +399,7 @@ Windowsの方はWin32 APIを直接呼び出すようになっていましたが�
 
 ![Part5_Diagram2](images/Part5_Diagram2.png)
 
-## ランタイム呼び出しの手段
+## ランタイム機能呼び出しの手段
 
 前節では、プラットフォームごとの実装を切り分けるのに、System.Private.CoreLibアセンブリを基準として、Bait and switchで実行アセンブリが差し替わっていることを確認しました。例としてDebugクラスの実装を追いましたが、そこでは普通にP/Invoke機能を使ってネイティブライブラリを呼び出していました:
 
@@ -422,7 +422,7 @@ QCallは、P/Invokeにかなり似ています。P/Invokeで想定できるマ�
 内部でQCall呼び出しをラップする、C#のメソッドの実装例を示します:
 
 ```csharp
-// QCallでネイティブコードを呼び出すための宣言(P/Invokeと似ているが異なる。publicにはできない)
+// QCallでネイティブコードを呼び出すための宣言(P/Invokeと似ているが異なる。基本的にpublicにはできない)
 [DllImport("QCall", CharSet = CharSet.Unicode)]
 private static extern bool Foo(int arg1, string arg2, System.Runtime.CompilerServices.StringHandleOnStack returnValue);
 
@@ -438,17 +438,19 @@ public static string Foo(int arg1, string arg2)
 }
 ```
 
-第一に、QCallはP/Invokeと同じようにDllImport属性を使います。ライブラリ名は固定的に"QCall"を指定しておきます。ネイティブ側の実装は、マネージド側に値を渡したい場合(この例のように、戻り値として文字列を返す想定)は、スタック上のstring参照を追跡できるようにする`StringHandleOnStack`という型を使います。
+第一に、QCallはP/Invokeと同じようにDllImport属性を使います。ライブラリ名は固定的に"QCall"を指定しておきます。ネイティブ側の実装は、マネージド側に値を渡したい場合(この例のように、戻り値として文字列を返す想定)は、スタック上のstring参照を追跡できるようにする`StringHandleOnStack`という型を使います。同様に、任意の参照型(objref)には、`ObjectHandleOnStack`を使います。これらを使うことで、P/Invokeで必要であったマーシャリングのコストを削減できます。
 
-そもそもStringHandleOnStackや、そのインスタンスを取得する`JitHelpers`は公開されていません(確認する場合は、ILSpyで検索するのが便利です。[ソースコードはこちら](https://github.com/dotnet/coreclr/blob/master/src/System.Private.CoreLib/src/System/Runtime/CompilerServices/jithelpers.cs))。
+しかし、そもそもStringHandleOnStackや、そのインスタンスを取得する`JitHelpers`は公開されていません([ソースコードはこちら](https://github.com/dotnet/coreclr/blob/master/src/System.Private.CoreLib/src/System/Runtime/CompilerServices/jithelpers.cs))。
 
-つまり、QCallを処理するメソッドは公開メソッドにはなり得ず、必ずSystem.Private.CoreLibアセンブリ内に閉じている必要があります。したがって、上記の例のように、QCallメソッドはprivateとし、間接的に安全に呼び出すpublicなメソッドを定義する必要があります。そして、当然ですが、QCallの対象となるネイティブメソッドの実装は、.NET Core CLR内部に用意しておく必要があります。
+つまり、QCallを処理するメソッドは、ほぼ公開メソッドにはなり得ず、必ずSystem.Private.CoreLibアセンブリ内に閉じている必要があります。したがって、上記の例のように、QCallメソッドはprivateとし、間接的に安全に呼び出すpublicなメソッドを定義する必要があります。そして、当然ですが、QCallの対象となるネイティブメソッドの実装は、.NET Core CLR内部に用意しておく必要があります。
 
 仮に実装した場合、以下のような体裁を持ちます:
 
 ```cpp
 // C++で記述する
-BOOL QCALLTYPE FooNative::Foo(int arg1, LPCWSTR arg2, QCall::StringHandleOnStack returnValue)
+BOOL QCALLTYPE FooNative::Foo(
+    int arg1, LPCWSTR arg2,
+    QCall::StringHandleOnStack returnValue)
 {
     // QCall呼び出しを処理可能にするためのマクロ
     QCALL_CONTRACT;
@@ -456,7 +458,7 @@ BOOL QCALLTYPE FooNative::Foo(int arg1, LPCWSTR arg2, QCall::StringHandleOnStack
     // QCall処理中に発生する例外が正しく伝搬するようにするマクロ
     BEGIN_QCALL;
 
-    if (arg1 >= 0)
+    if (arg1 < 0)
     {
         // 例外をスローする
         COMPlusThrow(kArgumentException, L"arg1");
@@ -478,8 +480,83 @@ BOOL QCALLTYPE FooNative::Foo(int arg1, LPCWSTR arg2, QCall::StringHandleOnStack
 }
 ```
 
-このメソッドを呼び出せるようにする(マネージド側のQCall宣言との結び付け)には、[ecalllist.hヘッダファイル](https://github.com/dotnet/coreclr/blob/master/src/vm/ecalllist.h)に対応を記述する必要があります。
+このメソッドを呼び出せるようにする(マネージド側のQCall宣言との結び付け)には、[ecalllist.hヘッダファイル](https://github.com/dotnet/coreclr/blob/master/src/vm/ecalllist.h)に対応を記述する必要があります(ここには、次に解説するFCallの宣言も記述します)。
+
+ところで、QCallで実装したネイティブコードを実行中は、ガベージコレクションが起きる可能性が常に存在します。つまり、P/Invokeのときと同様に、ヒープに確保されたインスタンスに生ポインタでアクセスする場合は、ガベージコレクションによって移動したり回収されたりしないように、実装者が管理する必要があります。
 
 ### FCall
 
-TODO:
+QCallの概要を見ると、その他の呼び出し手段は必要ないように見えます。FCallがQCallと決定的に異なるのは、FCallの呼び出しを実行している間は、ガベージコレクタが一時的に処理を止めることです。
+
+P/Invokeの場合、私達ができることは、GCHandleを使ってインスタンスをPinned状態にするかNormal状態に強制することでした。QCallの場合は、QCallのためのヘルパー型を使うことで、安全に処理することができますが、そこには少なからずコストを伴います。
+
+FCall呼び出しを使用する場合はガベージコレクタが動かないため、いつでも生ポインタをPinnedされているものとして扱えるようになります。しかし、FCallで呼び出されたメソッドの処理時間が長引くと、.NETプロセス全体に悪影響を及ぼします。
+
+以下は、System.Stringクラスの[インデクサのgetter実装](https://github.com/dotnet/coreclr/blob/580152a50e4092d32c7d05ec876cd6976483ebf1/src/System.Private.CoreLib/src/System/String.CoreCLR.cs#L39)です:
+
+```csharp
+[IndexerName("Chars")]
+public char this[int index]
+{
+    // System.Stringのインデクサ: get_Chars()
+    // DllImportではなく、以下の属性を使う
+    [MethodImpl(MethodImplOptions.InternalCall)]
+    get;
+}
+```
+
+ecalllist.hには、[インデクサに対応するネイティブメソッドの対応付け](https://github.com/dotnet/coreclr/blob/580152a50e4092d32c7d05ec876cd6976483ebf1/src/vm/ecalllist.h#L111)が定義されています:
+
+```cpp
+// ecalllist.h: get_Chars()とGetCharAt()を結びつける宣言
+FCFuncStart(gStringFuncs)
+    FCIntrinsic("get_Chars", COMString::GetCharAt, CORINFO_INTRINSIC_StringGetChar)
+FCFuncEnd()
+```
+
+そして、[対応するネイティブ実装](https://github.com/dotnet/coreclr/blob/580152a50e4092d32c7d05ec876cd6976483ebf1/src/classlibnative/bcltype/stringnative.cpp#L63)です:
+
+```cpp
+// C++で記述する
+FCIMPL2(FC_CHAR_RET, COMString::GetCharAt,
+    StringObject* str, INT32 index)
+{
+    // FCall呼び出しを処理可能にするためのマクロ
+    FCALL_CONTRACT;
+
+    // GCを長時間止めておく想定はなく、処理中にGCポーリングを必要としない
+    FC_GC_POLL_NOT_NEEDED();
+
+    VALIDATEOBJECT(str);
+    if (str == NULL) {
+        // 例外をスローする
+        FCThrow(kNullReferenceException);
+    }
+    _ASSERTE(str->GetMethodTable() == g_pStringClass);
+
+    // indexが文字数範囲内なら、バッファポインタから1文字を返す
+    if (index >=0 && index < (INT32)str->GetStringLength()) {
+        //Return the appropriate character.
+        return str->GetBuffer()[index];
+    }
+
+    // 例外をスローする
+    FCThrow(kIndexOutOfRangeException);
+}
+// (FCallのためのFCIMPLマクロの終端定義)
+FCIMPLEND
+```
+
+インデクサアクセスは、上記の通りO(1)です。FCallを実行している間はガベージコレクタが動かないと言っても、ネイティブコードのサイズは小さいため、処理中にスケジュールされる可能性はかなり低いと思われます。そのような場合はQCallよりも効率がよくなるため、FCallを使って実装していると考えられます。
+
+もし、FCallで呼び出されたメソッドが、長時間の処理を必要とする場合、途中で(問題ないタイミングで)一時的にガベージコレクションを行わせることができます。この事をGCポーリングと呼びます。
+
+FCallとQCallの使い分けについての決定的な差は、上記の通り、ガベージコレクション操作とマーシャリングの影響を最小限に抑えたいかどうかが、判断の基準となります。あるいは、非常に密接にCLRの内部操作と連携する必要がある場合(その間にガベージコレクションが実行されるては困る場合)にも、FCallを使うことがあります。
+
+### HCall
+
+HCallはFCallとほとんど違いがありません。HCallとして実装したネイティブメソッドから例外をスローした場合に、記録されるスタックフレームにHCallのメソッドが含まれなくなります。これは、主にJITが生成したコードが使うヘルパーメソッドに使われ、例外をスローする際に内部的なメソッドを記録しないようにしています。例えば、[JIT_ChkCastArray](https://github.com/dotnet/coreclr/blob/580152a50e4092d32c7d05ec876cd6976483ebf1/src/vm/jithelpers.cpp#L2428)は、配列がキャスト可能かどうかの判定を行うHCallメソッドです。キャストできない場合に例外をスローしますが、このメソッドは例外のスタックトレースに含まれません。
+
+### まとめ
+
+マルチプラットフォームの環境によっては、表面的に同じ操作を行うメソッドであっても、内部のネイティブコード連携では、QCall,FCall,HCall(場合によってはP/Invoke)を使い分けるということがあるかもしれません。そのような場合でも、Bait and switchテクニックで、System.Private.CoreLibアセンブリが差し替わることで、柔軟に対応できることがわかります。
