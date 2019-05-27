@@ -110,9 +110,9 @@ Bait and switchテクニックは、実装を入れ替えることができる�
 |インターフェイス分離|OOPの一般的な手法。誰でもリスクなしで使用でき、コンパイラが型チェックでエラーを検出してくれる|初めから使用する前提で設計する必要がある|
 |Bait and switch|後から依存性の分離を行うことができる|型チェックはコンパイル時に行われないため、問題があると実行時エラーを起こす|
 
-かつてのPortable Class Libraryは、Bait and switch手法で互換性を実現しました。ここまでの解説で、PCLが何十というプロファイルを持っていたことを考えると、問題が発生しないように保守することがいかに困難であったかが想像出来ます。
+かつてのPortable Class Libraryは、Bait and switch手法で互換性を実現しました。ここまでの解説で、PCLが何十というプロファイルを持っていたことを考えると、互換性を維持することがいかに困難であったかが想像出来ます。
 
-Bait and switchを適用する場合は、メタデータの不一致を何らかの方法で開発時に検証できるようにするか、あるいはテンプレートコードの自動生成や合成ができるようにするなどの手法を用意することが重要です。
+Bait and switchを適用する場合は、メタデータの不一致を何らかの方法で開発時に検証できるようにするか、あるいはテンプレートコードの自動生成や合成ができるようにするなどの手法を用意し、開発の困難さを軽減することが重要です。
 
 # アンマネージ連携
 
@@ -134,7 +134,7 @@ public static class Program
 }
 ```
 
-ネイティブコードのライブラリがダイナミックリンクライブラリとして用意されていれば、全く同じ手法でコードを記述することが出来ます。LinuxやMacOSといったプラットフォーム向けのコードは、それぞれで利用可能なネイティブコードライブラリが異なることが多々ありますが、P/Invoke自体の使用方法は同じです。.NET Coreやmono向けのライブラリも、同じように作ることができます。特に、ネイティブコードライブラリがクロスプラットフォームで（dll、dylib、soなど形式は異なっても）同じAPIを提供していれば、同一のP/Invokeコードがそれぞれのプラットフォームで実行できます。
+ネイティブコードのライブラリがダイナミックリンクライブラリとして用意されていれば、全く同じ手法でコードを記述することが出来ます。LinuxやMacOSといったプラットフォーム向けのコードは、それぞれで利用可能なネイティブコードライブラリが異なることが多々ありますが、P/Invoke自体の使用方法は同じです。.NET Coreやmono向けのライブラリも、同じように作ることができます。特に、ネイティブコードライブラリがクロスプラットフォームで（dll、dylib、soなど、ライブラリの形式が異なっても）同じAPIを提供していれば、同一のP/Invokeコードがそれぞれのプラットフォームで実行できます。
 
 前章で述べた、インターフェイス分離設計やBait and switchテクニックをP/Invokeと組み合わせると、.NETでマルチプラットフォームの一貫したライブラリ設計を行うことができます。つまり、前章の依存コードの部分をP/Invokeを使って実装すれば、そのプラットフォーム固有のAPIがネイティブコードであったとしても、部品として使える共通のアセンブリを構築できる、と言うことです。
 
@@ -146,7 +146,7 @@ public static class Program
   * Windows環境の場合、Win32のOutputDebugString APIを使用して出力する。これは[SysinternalsのDebugViewユーティリティ](https://docs.microsoft.com/en-us/sysinternals/downloads/debugview)で確認できるほか、各種デバッガがアタッチされていれば、デバッガ上で確認できる。
   * Linux環境の場合、syslog APIを使用して出力する。
 
-注意: 一般的な開発でこの程度の規模であれば、Bait and switchテクニックを使用する理由は全くありません。ここでは、後述のランタイムサイドの解説に関連するため、あえてBait and switchで実装を行っています。
+注意: 一般的な開発でこの程度の規模であれば、Bait and switchテクニックを使用する理由は全くありません。ここでは、後述のランタイムサイドの解説に関係するため、あえてBait and switchで実装を行っています。
 
 DebugMessageプロジェクトは、DebugMessage.Referenceの参照アセンブリを使ってビルドします。実際に必要なのは、実行用のアセンブリ、DebugMessage.Win32とDebugMessage.Linuxです。前章のサンプルと同じく、これらを実行時に置き換える必要があります。
 
@@ -185,16 +185,16 @@ public void Read()
 
 ガベージコレクタは、引数・ローカル変数・フィールドなどからインスタンスが参照されているかどうかを追跡しています。この場合、bufferのインスタンスが回収されてしまうことはありません。一般的に、APIが実行を終えて戻ってきたとき(A)、当然bufferにアクセス出来ることが期待できます。
 
-ガベージコレクタがインスタンスを回収するかどうかの他にも、ネイティブコードとして考慮すべき点があります。それは、インスタンスの物理的なアドレス(ポインタ値、但し仮想メモリ上の)が変わるのか同じ位置にあるのか、ということです。ガベージコレクタの手法にもよりますが、.NET CoreCLRの場合は、ヒープコンパクションと呼ばれる機能により、必要に応じてインスタンスが移動する事があります。これらをまとめると、以下のようになります:
+(一般的には、マーシャリングという用語は、データ形式の相互変換とスレッドなどのコンテキスト切り替えの両方の意味で使いますが、本稿では前者のデータ形式の相互変換にのみ使用します。)
+
+ガベージコレクタがインスタンスを回収するかどうかの他にも、ネイティブコードとして考慮すべき点があります。それは、インスタンスの物理的なアドレス(ポインタ値、但し仮想メモリ上の)が変わるのか同じ位置にあるのか、ということです。ガベージコレクタの手法にもよりますが、.NET CLRの場合は、ヒープコンパクションと呼ばれる機能により、必要に応じてインスタンスが移動する事があります。これらをまとめると、以下のようになります:
 
 ||維持される|回収されるかも知れない|
 |:--|:--|:--|
 |移動しない|Pinned|---|
 |移動するかもしれない|Normal|Weak|
 
-ネイティブコードライブラリを設計する場合は、CLRの伺い知れないところで動作するため、通常、インスタンスが維持され、かつインスタンスが移動しないこと(Pinned)が要求されます。稀にインスタンスが存在し続けて欲しいが、インスタンス自体にはアクセスしない(Normal)、という場合もあります。
-
-(Weakについては本資料では割愛します)
+ネイティブコードライブラリを設計する場合は、CLRの伺い知れないところで動作するため、通常、インスタンスが維持され、かつインスタンスが移動しないこと(Pinned)が要求されます。稀にインスタンスが存在し続けて欲しいが、インスタンス自体にはアクセスしない(Normal)、という場合もあります(Weakについては本資料では割愛します)。
 
 先程説明したように、インスタンスが追跡可能な状態であれば、何もしなくてもNormalと同様に維持されます。インスタンスがどこからも追跡できなくなるような状況下では、明示的にNormalまたはPinnedとしてCLRに通知する必要があります。
 
@@ -217,6 +217,7 @@ public void Read()
     try
     {
         // pBufferは配列の先頭を示す、本物のアドレス
+        // (この他にToIntPtrメソッドがあるが、これはGCHandleの抽象表現であり、ポインタとしては使えない)
         var pBuffer = bufferHandle.AddrOfPinnedObject();
         ReadToBuffer(pBuffer, buffer.Length);
     }
@@ -235,12 +236,11 @@ public void Read()
 |自動マーシャリング|安全で簡潔に記述できる|マーシャリングのタイミングをコントロールできないため、パフォーマンスの問題につながることがある|
 |手動マーシャリング|マーシャリングのタイミングをコントロールできるため、パフォーマンスを最大化出来る|ガベージコレクタに誤って解放されたり、メモリリークしないように注意を払う必要がある|
 
-例えば、ネイティブライブラリの関数によっては、引数として渡されたポインタを保持して、ずっと後になってから参照して使うこともあります。
-そのような場合には、明らかにネイティブコードで使用されなくなるまで、明示的にGCHandleを保持して解放する必要があります。
+例えば、ネイティブライブラリの関数によっては、引数として渡されたポインタを保持して、ずっと後になってから参照して使うこともあります。そのような場合には、最初に明示的にNormalとし、明らかにネイティブコードで使用されなくなるまで保持し、最終的に解放する必要があります。
 
-また、バッファへのポインタが頻繁に必要になる場合、自動マーシャリングするよりも、一度だけ手動マーシャリングして連続してポインタを使用し、最後に手動で解放したほうが効率的かもしれません。
+また、バッファへのポインタが頻繁に必要になる場合は、自動マーシャリングするよりも、一度だけ手動マーシャリングしてPinnedとし、連続してポインタを使用し、最後に手動で解放したほうが効率的かもしれません。
 
-[Part4_Marshalingプロジェクト](Part4_Marshaling)は、これを確認するマーシャリング処理の例です:
+[Part4_Marshalingプロジェクト](Part4_Marshaling)は、手動マーシャリング処理の例です:
 
 * Win32NativeLibraryプロジェクトは、Visual C++のネイティブプロジェクトで、GenerateData APIを公開します。GenerateData APIは指定されたバッファアドレスに、数列を書き込みます。
 * BothMarshalingTypesプロジェクトから、P/InvokeでGenerateData APIを呼び出します。
@@ -267,9 +267,9 @@ public void Read()
 
 かつて、.NET Frameworkでは、[BCL (Base class library)](https://docs.microsoft.com/ja-jp/dotnet/standard/framework-libraries#base-class-libraries)を、「mscorlib.dll」という単一のアセンブリで担っていました。
 
-（ちなみに、monoでも、.NETランタイムが、アセンブリ参照の厳密名さえ同じであれば実体が別のアセンブリをロードして実行できるという性質を利用して、mscorlib.dllという同じ名前を使いつつ中身はmono独自に実装されている、別のアセンブリをロードすることで、.NET Frameworkとの互換性を実現していました。マルチプラットフォーム動作の実現については、後述するQCallやFCallに類似する仕組みを用いて、同一の実装アセンブリで実現していました。ただし、monoの実装は、corefxのコード取り込み作業が継続的に進んでいることもあって、流動的です。）
+* monoは、.NET Framework 1.0が出てから数年でプロジェクトが始まっていますが、アセンブリ参照の厳密名さえ同じであれば、実体が別のアセンブリをロードして実行できるという性質を利用して、mscorlib.dllという同じ名前を使いつつ中身はmono独自に実装されている、別のアセンブリをロードすることで、.NET Frameworkとの互換性を実現していました。マルチプラットフォーム動作の実現については、後述するQCallやFCallに類似する仕組みを用いて、同一の実装アセンブリで実現していました。ただし、monoの実装は、corefxのコード取り込み作業が継続的に進んでいることもあって、流動的です。
 
-.NET Core 1.0のリリースにあたり、巨大化してしまったmscorlib.dllを分割するために、前節で例示した「System.Runtime.dll」と「System.Private.CoreLib.dll」、その他の細かいアセンブリ群に細分化しました。特に、.NET CoreCLRランタイムと密接に絡む実装が含まれるアセンブリが、System.Private.CoreLibアセンブリです。
+.NET Core 1.0のリリースにあたり、.NET Frameworkの歴史で巨大化してしまったmscorlib.dllを分割するために、前節で例示した「System.Runtime.dll」と「System.Private.CoreLib.dll」、その他の細かいアセンブリ群に細分化しました。特に、.NET CoreCLRランタイムと密接に絡む実装が含まれるアセンブリが、System.Private.CoreLibアセンブリです。
 
 ![Part5_Diagram1](images/Part5_Diagram1.png)
 
@@ -367,7 +367,7 @@ private static void WriteToDebugger(string message)
 internal static extern void OutputDebugString(string message);
 ```
 
-これで、Windows環境のSystem.Private.CoreLibアセンブリには、Win32 APIに依存した実装が含まれていることが確認できました。Linux版.NET Core SDK 2.2のSystem.Private.CoreLibアセンブリをILSpyで見ると、以下のようになっていました:
+これで、Windows環境のSystem.Private.CoreLibアセンブリには、Win32 APIを直接呼び出す実装が含まれていることが確認できました。Linux版.NET Core SDK 2.2のSystem.Private.CoreLibアセンブリをILSpyで見ると、以下のようになっていました:
 
 (/usr/share/dotnet/shared/Microsoft.NETCore.App/2.2.5/ 配下にあります。バージョンは各自の環境に合わせて読み替えて下さい)
 
@@ -418,24 +418,32 @@ internal static extern void OutputDebugString(string message);
 internal static extern void SysLog(SysLogPriority priority, string message, string arg1);
 ```
 
-しかし、.NET CLRの内部機能を呼び出す場合は、P/Invokeではなく、別の方法を使用する必要があります。以下に、3種類の呼び出し方法`QCall`, `FCall`, `HCall`について示します。それぞれは異なる呼び出し方法で、目的によって使い分けられています。なお、同じ機能を別の呼び出し方法で呼び出すことは出来ません。
+しかし、.NET CLRの内部機能を呼び出す場合は、P/Invokeではなく、別の方法を使用する必要があります。以下に、3種類の呼び出し方法`QCall`, `FCall`, `HCall`について示します。それぞれの手法は異なり、目的によって使い分けられています。同じ機能を別の呼び出し方法で呼び出すことは出来ません。
 
 ### QCall
 
-QCallは、P/Invokeにかなり似ています。P/Invokeで想定できるマーシャリングは、プリミティブ型であればそのまま使えます。文字列の場合は、LPCWSTR (const wchar_t*)を想定でき、文字列の返却にStringBuilderを使う必要がありません。それに加えてP/Invokeでは実現しない、ネイティブからの例外のスローが可能です。
+QCallは、P/Invokeにかなり似ています。P/Invokeで想定できるマーシャリングは、プリミティブ型であればそのまま使えます。文字列も、自動的にLPCWSTR (const wchar_t*)でマーシャリングされます。P/Invokeの場合、文字列の返却にStringBuilderを使いますが、代わりの低コストな手段が用意されています。それに加えてP/Invokeでは実現しない、ネイティブからの例外のスローが可能です。
 
 内部でQCall呼び出しをラップする、C#のメソッドの実装例を示します:
 
 ```csharp
-// QCallでネイティブコードを呼び出すための宣言(P/Invokeと似ているが異なる。基本的にpublicにはできない)
+// QCallでネイティブコードを呼び出すための宣言
+// (P/Invokeと似ているが異なる。基本的にpublicにはできない)
 [DllImport("QCall", CharSet = CharSet.Unicode)]
-private static extern bool Foo(int arg1, string arg2, System.Runtime.CompilerServices.StringHandleOnStack returnValue);
+private static extern bool Foo(
+    int arg1, string arg2,
+    System.Runtime.CompilerServices.StringHandleOnStack returnValue);
 
 // ラップして安全なメソッドとして公開
 public static string Foo(int arg1, string arg2)
 {
+    // 文字列を結果として受け取る場所を、スタックに用意する
     string returnValue = null;
-    if (!Foo(arg1, arg2, System.Runtime.CompilerServices.JitHelpers.GetStringHandle(ref retString)))
+
+    // ネイティブメソッドの呼び出し
+    // スタック上のreturnValueを指すように、StringHandleOnStackが初期化される
+    if (!Foo(arg1, arg2,
+        System.Runtime.CompilerServices.JitHelpers.GetStringHandle(ref returnValue)))
     {
         throw new InvalidOperationException("...");
     }
@@ -443,11 +451,11 @@ public static string Foo(int arg1, string arg2)
 }
 ```
 
-第一に、QCallはP/Invokeと同じようにDllImport属性を使います。ライブラリ名は固定的に"QCall"を指定しておきます。ネイティブ側の実装は、マネージド側に値を渡したい場合(この例のように、戻り値として文字列を返す想定)は、スタック上のstring参照を追跡できるようにする`StringHandleOnStack`という型を使います。同様に、任意の参照型(objref)には、`ObjectHandleOnStack`を使います。これらを使うことで、P/Invokeで必要であったマーシャリングのコストを削減できます。
+第一に、QCallはP/Invokeと同じようにDllImport属性を使います。ライブラリ名は固定的に"QCall"を指定しておきます。ネイティブ側の実装は、マネージド側に値を返したい場合(この例のように、戻り値として文字列を返す想定)は、スタック上の文字列参照を追跡できるようにする`StringHandleOnStack`という型を使います。同様に、任意の参照型(objref)には、`ObjectHandleOnStack`を使います。これらを使うことで、P/Invokeで必要であったマーシャリングのコストを削減できます。
 
-しかし、そもそもStringHandleOnStackや、そのインスタンスを取得する`JitHelpers`は公開されていません([ソースコードはこちら](https://github.com/dotnet/coreclr/blob/master/src/System.Private.CoreLib/src/System/Runtime/CompilerServices/jithelpers.cs))。
+しかし、そもそもStringHandleOnStackや、そのインスタンスを取得する`JitHelpers`は、publicではありません([ソースコードはこちら](https://github.com/dotnet/coreclr/blob/master/src/System.Private.CoreLib/src/System/Runtime/CompilerServices/jithelpers.cs))。
 
-つまり、QCallを処理するメソッドは、ほぼ公開メソッドにはなり得ず、必ずSystem.Private.CoreLibアセンブリ内に閉じている必要があります。したがって、上記の例のように、QCallメソッドはprivateとし、間接的に安全に呼び出すpublicなメソッドを定義する必要があります。そして、当然ですが、QCallの対象となるネイティブメソッドの実装は、.NET Core CLR内部に用意しておく必要があります。
+つまり、QCallを処理するメソッドは、ほぼ公開メソッドにはなり得ず、System.Private.CoreLibアセンブリ内に閉じている必要があります。したがって上記の例のように、QCallメソッドはprivateとし、publicなファサードメソッドを定義する必要があります。そして、当然ですが、QCallの対象となるネイティブメソッドの実装は、.NET CLR内部に用意しておく必要があります。
 
 仮に実装した場合、以下のような体裁を持ちます:
 
@@ -474,7 +482,7 @@ BOOL QCALLTYPE FooNative::Foo(
     printf("%d, %S", arg1, arg2);
 
     // 文字列への参照を、直接呼び出し元のスタックに設定できる
-    // (P/InvokeにおけるStringBuilderのようなオーバーヘッドはない)
+    // (P/InvokeにおけるStringBuilderほどのオーバーヘッドはないが柔軟性には欠ける)
     returnValue.Set(L"Hello");
 
     // QCallの後始末マクロ
@@ -485,17 +493,17 @@ BOOL QCALLTYPE FooNative::Foo(
 }
 ```
 
-このメソッドを呼び出せるようにする(マネージド側のQCall宣言との結び付け)には、[ecalllist.hヘッダファイル](https://github.com/dotnet/coreclr/blob/master/src/vm/ecalllist.h)に対応を記述する必要があります(ここには、次に解説するFCallの宣言も記述します)。
+このメソッドを呼び出せるようにする(マネージド側のQCall宣言との結び付け)には、[ecalllist.hヘッダファイル](https://github.com/dotnet/coreclr/blob/master/src/vm/ecalllist.h)に対応を記述する必要があります(次に解説するFCallの宣言も、ここに記述します)。
 
 ところで、QCallで実装したネイティブコードを実行中は、ガベージコレクションが起きる可能性が常に存在します。つまり、P/Invokeのときと同様に、ヒープに確保されたインスタンスに生ポインタでアクセスする場合は、ガベージコレクションによって移動したり回収されたりしないように、実装者が管理する必要があります。
 
 ### FCall
 
-QCallの概要を見ると、その他の呼び出し手段は必要ないように見えます。FCallがQCallと決定的に異なるのは、FCallの呼び出しを実行している間は、ガベージコレクタが一時的に処理を止めることです。
+QCallの概要を見ると、その他の呼び出し手段は必要ないように見えます。FCallがQCallと決定的に異なるのは、FCallの呼び出しを実行している間、自動的にガベージコレクタが停止することです。
 
-P/Invokeの場合、私達ができることは、GCHandleを使ってインスタンスをPinned状態にするかNormal状態に強制することでした。QCallの場合は、QCallのためのヘルパー型を使うことで、安全に処理することができますが、そこには少なからずコストを伴います。
+P/Invokeの場合、ガベージコレクションによる破壊を回避するには、GCHandleを使ってインスタンスをPinned状態にするかNormal状態に強制することでした。QCallの場合は、QCallのためのヘルパー型を使うことで、安全に処理することができますが、そこには少なからずコストを伴います。
 
-FCall呼び出しを使用する場合はガベージコレクタが動かないため、いつでも生ポインタをPinnedされているものとして扱えるようになります。しかし、FCallで呼び出されたメソッドの処理時間が長引くと、.NETプロセス全体に悪影響を及ぼします。
+FCall呼び出しを使用すると、その間ガベージコレクタが動かないため、いつでも生ポインタをPinnedされているものとして扱えるようになります。当然ですが、FCallで呼び出されたメソッドの処理時間が長引くと、.NETプロセス全体に悪影響を及ぼします。
 
 以下は、System.Stringクラスの[インデクサのgetter実装](https://github.com/dotnet/coreclr/blob/580152a50e4092d32c7d05ec876cd6976483ebf1/src/System.Private.CoreLib/src/System/String.CoreCLR.cs#L39)です:
 
@@ -509,6 +517,8 @@ public char this[int index]
     get;
 }
 ```
+
+ILSpyを定常的に使っている方は、メソッド呼び出しをたどっていくと、この属性に行き当たるのを見たかも知れません。あなたが目にしたのは、.NET CLR内部のFCallメソッドへの扉、と言うわけです。
 
 ecalllist.hには、[インデクサに対応するネイティブメソッドの対応付け](https://github.com/dotnet/coreclr/blob/580152a50e4092d32c7d05ec876cd6976483ebf1/src/vm/ecalllist.h#L111)が定義されています:
 
@@ -524,7 +534,7 @@ FCFuncEnd()
 ```cpp
 // C++で記述する
 FCIMPL2(FC_CHAR_RET, COMString::GetCharAt,
-    StringObject* str, INT32 index)
+    StringObject* str, INT32 index)    // (strは生ポインタであることに注意)
 {
     // FCall呼び出しを処理可能にするためのマクロ
     FCALL_CONTRACT;
@@ -541,7 +551,6 @@ FCIMPL2(FC_CHAR_RET, COMString::GetCharAt,
 
     // indexが文字数範囲内なら、バッファポインタから1文字を返す
     if (index >=0 && index < (INT32)str->GetStringLength()) {
-        //Return the appropriate character.
         return str->GetBuffer()[index];
     }
 
@@ -552,17 +561,17 @@ FCIMPL2(FC_CHAR_RET, COMString::GetCharAt,
 FCIMPLEND
 ```
 
-この例では、対象のSystem.Stringインスタンス(つまり文字列のthis)は、str引数で参照されますが、これは生ポインタです。つまりFCallでなければ、ガベージコレクタがいつ移動したり回収したりするかわからないのです。
+この例では、対象のSystem.Stringインスタンス(つまり文字列のthis)は、str引数で参照されますが、これは生ポインタです。つまりFCallなら、ガベージコレクタがインスタンスを移動したり回収したりする心配をすることなく、生ポインタを直接操作することが出来ます。
 
-インデクサアクセスは、上記の通りO(1)です。FCallを実行している間はガベージコレクタが動かないと言っても、ネイティブコードのサイズは小さいため、処理中にスケジュールされる可能性はかなり低いと思われます。そのような場合は、QCallよりも効率がよくなるため、FCallを使って実装していると考えられます。
+インデクサアクセスは、上記の通りO(1)です。FCallではガベージコレクタが動かないと言っても、ネイティブコードのサイズは小さいため、処理中にそのタイミングが重なる可能性はかなり低いと思われます。
 
-もし、FCallで呼び出されたメソッドが、長時間の処理を必要とする場合、途中で(問題ないタイミングで)一時的にガベージコレクションを行わせることができます。この事をGCポーリングと呼びます。
+もし、FCallで呼び出されたメソッドが長時間の処理を必要とする場合は、途中で(問題ないタイミングで)一時的にガベージコレクションを行わせることができます。この事をGCポーリングと呼びます。
 
-FCallとQCallの使い分けについての決定的な差は、上記の通り、ガベージコレクション操作とマーシャリングの影響を最小限に抑えたいかどうかが、判断の基準となります。あるいは、非常に密接にCLRの内部操作と連携する必要がある場合(その間にガベージコレクションが実行されるては困る場合)にも、FCallを使うことがあります。
+FCallとQCallの使い分けについての決定的な差は、上記の通り、ガベージコレクション操作とマーシャリングの影響を最小限に抑えたいかどうかが、判断の基準となります。あるいは、非常に密接にCLRの内部操作と連携する必要がある場合(その間にガベージコレクションが実行されては困る場合)にも、FCallを使うことがあります。
 
 ### HCall
 
-HCallはFCallとほとんど違いがありません。HCallとして実装したネイティブメソッドから例外をスローした場合に、記録されるスタックフレームにHCallのメソッドが含まれなくなります。これは、主にJITが生成したコードが使うヘルパーメソッドに使われ、例外をスローする際に内部的なメソッドを記録しないようにしています。例えば、[JIT_ChkCastArray](https://github.com/dotnet/coreclr/blob/580152a50e4092d32c7d05ec876cd6976483ebf1/src/vm/jithelpers.cpp#L2428)は、配列がキャスト可能かどうかの判定を行うHCallメソッドです。キャストできない場合に例外をスローしますが、このメソッドは例外のスタックトレースに含まれません。
+HCallはFCallとほとんど違いがありません。HCallとして実装したネイティブメソッドから例外をスローした場合に、記録されるスタックフレームにHCallのメソッドが含まれなくなります。これは、主にJITが生成したコードが使うヘルパーメソッドに使われ、例外をスローする際に内部的なメソッドを記録しないようにしています。例えば、[JIT_ChkCastArray](https://github.com/dotnet/coreclr/blob/580152a50e4092d32c7d05ec876cd6976483ebf1/src/vm/jithelpers.cpp#L2428)は、配列がキャスト可能かどうかの判定を行うHCallメソッドです。キャストできない場合に例外をスローしますが、例外のスタックトレースにこのメソッドは含まれません。
 
 ### まとめ
 
