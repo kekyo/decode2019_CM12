@@ -1,0 +1,47 @@
+jobs:
+  - job: Windows
+    pool:
+      vmImage: "vs2017-win2016"
+#   variables:
+#     buildConfiguration: "Debug"
+    steps:
+      - task: DotNetCoreCLI@1
+        displayName: "nuget restore Part1_SplitByInterface.sln"
+        inputs:
+          command: "restore"
+          projects: "Part1_SplitByInterface/Part1_SplitByInterface.sln"
+      - task: DotNetCoreCLI@1
+        displayName: "nuget restore Part2_BaitAndSwitch.sln"
+        inputs:
+          command: "restore"
+          projects: "Part2_BaitAndSwitch/Part2_BaitAndSwitch.sln"
+      - task: DotNetCoreCLI@1
+        displayName: "nuget restore Part3_PInvoke.sln"
+        inputs:
+          command: "restore"
+          projects: "Part3_PInvoke/Part3_PInvoke.sln"
+      - task: DotNetCoreCLI@1
+        displayName: "nuget restore Part4_Marshaling.sln"
+        inputs:
+          command: "restore"
+          projects: "Part4_Marshaling/Part4_Marshaling.sln"
+      - task: MSBuild@1
+        displayName: "build Part1_SplitByInterface"
+        inputs:
+          solution: "Part1_SplitByInterface/Part1_SplitByInterface.sln"
+          configuration: "$(buildConfiguration)"
+      - task: MSBuild@1
+        displayName: "build Part2_BaitAndSwitch"
+        inputs:
+          solution: "Part2_BaitAndSwitch/Part2_BaitAndSwitch.sln"
+          configuration: "$(buildConfiguration)"
+      - task: MSBuild@1
+        displayName: "build Part3_PInvoke"
+        inputs:
+          solution: "Part3_PInvoke/Part3_PInvoke.sln"
+          configuration: "$(buildConfiguration)"
+      - task: MSBuild@1
+        displayName: "build Part4_Marshaling"
+        inputs:
+          solution: "Part4_Marshaling/Part4_Marshaling.sln"
+          configuration: "$(buildConfiguration)"

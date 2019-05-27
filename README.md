@@ -17,6 +17,11 @@
 * ライセンスは外部参照を除き、MITとします。コードにはいかなる保証もありません。ご自身のプロジェクトに適用する場合は、各自の判断で行ってください。
 * この資料はコミュニティコンテンツです。ライセンスに従っていただけるのであれば、GitHub上でissueとpull requestを受け付けます。
 
+## サンプルコード
+
+* このリポジトリ内に配置され、ドキュメント内からリンクされているので参照してください。
+* Azure PipelinesでCIしています: [![Azure PipelinesでCIしています](https://dev.azure.com/kekyo/decode2019_CM12/_apis/build/status/samples)](https://dev.azure.com/kekyo/decode2019_CM12/_build?definitionId=8)
+
 # 概要
 
 .NETにおけるマルチプラットフォーム対応を支えるための、アセンブリレベルでの互換性の対処方法について、サンプルコードと解説を行います。章が進むにつれて、より細部についての解説を行っています。
