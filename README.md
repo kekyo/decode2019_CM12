@@ -2,13 +2,14 @@
 
 ![de:code 2019](images/decode2019_banner.png)
 
-このリポジトリは、2019年5月に東京で開催される[「de:code 2019」](https://www.microsoft.com/ja-jp/events/decode/2019/default.aspx)のセッション[「CM12: .NET Core マルチプラットフォームの本質」](https://www.microsoft.com/ja-jp/events/decode/2019session/detail.aspx?sid=CM12)に対応するサンプルコードと解説を公開しています。
+## はじめに
 
-* (作業中です)
+このリポジトリは、2019年5月29,30日に東京で開催される[「de:code 2019」](https://www.microsoft.com/ja-jp/events/decode/2019/default.aspx)のセッション[「CM12: .NET Core マルチプラットフォームの本質」](https://www.microsoft.com/ja-jp/events/decode/2019session/detail.aspx?sid=CM12)に対応するサンプルコードと解説を公開しています。
 
 * 本記事はKouji Matsuiが独自に構成、執筆したものであり、[「Microsoft MVPパーソナルスポンサー」](https://www.microsoft.com/ja-jp/events/decode/2019/sponsor.aspx)として提供するものです。de:code 2019のオフィシャルドキュメントではありません。
 * 本記事執筆時には、セッションの概要のみ公開されているため、内容が密接に連携しない場合があります。また、内容は、原稿執筆時の情報によります。
 * サンプルコードの開発検証環境は、Visual Studio 2017 (15.9.11)です。2019でも動作すると思われますが、都合により未確認です。また、Linux環境はWSL1のUbuntu 18.04 + dotnet-sdk-2.2 (2.2.204-1)で検証しました。
+* 読者の想定難易度は、セッションの基準であるLevel 400より多少低いところを出発点とし、章を追うことでセッションの基準難易度に近づくようにしています。できるだけ抽象的な解説を避け、具体例や図による解説、既存のコードへの参照を含めています。
 
 ## 著作権表記
 
@@ -267,8 +268,6 @@ public void Read()
 
 かつて、.NET Frameworkでは、[BCL (Base class library)](https://docs.microsoft.com/ja-jp/dotnet/standard/framework-libraries#base-class-libraries)を、「mscorlib.dll」という単一のアセンブリで担っていました。
 
-* monoは、.NET Framework 1.0が出てから数年でプロジェクトが始まっていますが、アセンブリ参照の厳密名さえ同じであれば、実体が別のアセンブリをロードして実行できるという性質を利用して、mscorlib.dllという同じ名前を使いつつ中身はmono独自に実装されている、別のアセンブリをロードすることで、.NET Frameworkとの互換性を実現していました。マルチプラットフォーム動作の実現については、後述するQCallやFCallに類似する仕組みを用いて、同一の実装アセンブリで実現していました。ただし、monoの実装は、corefxのコード取り込み作業が継続的に進んでいることもあって、流動的です。
-
 .NET Core 1.0のリリースにあたり、.NET Frameworkの歴史で巨大化してしまったmscorlib.dllを分割するために、前節で例示した「System.Runtime.dll」と「System.Private.CoreLib.dll」、その他の細かいアセンブリ群に細分化しました。特に、.NET CoreCLRランタイムと密接に絡む実装が含まれるアセンブリが、System.Private.CoreLibアセンブリです。
 
 ![Part5_Diagram1](images/Part5_Diagram1.png)
@@ -276,6 +275,8 @@ public void Read()
 この図は、Part1_SplitByInterfaceプロジェクトのCalculator.Core.dllをILSpyで確認したものです。左上がCalculator.Coreアセンブリで、netstandardアセンブリに依存しています。netstandardアセンブリはかなり多くのアセンブリに依存していますが、その中にSystem.Runtimeアセンブリが存在します。
 
 System.RuntimeアセンブリはSystem.Private.CoreLibアセンブリに依存し、ここから先に依存する.NETのアセンブリはありません。そして、System名前空間を確認すると、見慣れた`Array`,`Boolean`,`Byte`,`Char`といった型が定義されていることがわかります。
+
+* 余談: monoは、.NET Framework 1.0が出てから数年でプロジェクトが始まっていますが、アセンブリ参照の厳密名さえ同じであれば、実体が別のアセンブリをロードして実行できるという性質を利用して、mscorlib.dllという同じ名前を使いつつ中身はmono独自に実装されている、別のアセンブリをロードすることで、.NET Frameworkとの互換性を実現していました。マルチプラットフォーム動作の実現については、後述するQCallやFCallに類似する仕組みを用いて、同一の実装アセンブリで実現していました。ただし、monoの実装は、corefxのコード取り込み作業が継続的に進んでいることもあって、流動的です。
 
 System.Private.CoreLibアセンブリ内には、かなり多くのクラスや構造体が定義されています。これらの型のメソッドは、そのプラットフォームに依存した処理が実装されているはずです。例として、`System.Diagnostics.Debug`クラスを追ってみましょう:
 
@@ -337,9 +338,7 @@ private static void WriteCore(string message)
 }
 ```
 
-引数のmessageを4091文字づつ分割して、`WriteToDebugger()`メソッドで出力しています。
-
-(4091文字づつである理由については定かではありませんが、PAGE_SIZE * 2に収まる範囲、とかそういう事かもしれません)
+引数のmessageを4091文字づつ分割して、`WriteToDebugger()`メソッドで出力しています (4091文字づつである理由については定かではありませんが、PAGE_SIZE * 2に収まる範囲、とかそういう事かもしれません)。
 
 ### Debug.WriteToDebugger(string)
 
@@ -403,6 +402,8 @@ Windowsの方はWin32 APIを直接呼び出すようになっていましたが�
 ところで、.NET CoreはLinuxだけではなく、FreeBSDもサポートしています。しかし、DebugProvider.Unix.csは名前の通り、Unix環境で共通に使われるようです。ここではこれ以上掘り下げませんが、LinuxとFreeBSDで実装に違いがあるとすれば、以下の図のようにネイティブライブラリのPALの方で吸収しているのではないかと思います。
 
 ![Part5_Diagram2](images/Part5_Diagram2.png)
+
+* 余談: PALの呼び出しは、`#if FEATURE_PAL`と言うプリプロセッサ指令で切り分けられていることがあります。興味深いことにこのシンボル名は、.NET Frameworkのソースコードを参照できる「referencesource.microsoft.com」でも、ところどころで見ることが出来ます。つまり、.NET Core世代ではなく、.NET Frameworkの頃から、PALによるネイティブ実装の切り替えを想定(あるいは使用)していた可能性があります。残念ながら、サイトで見ることができるソースコードはマネージド側だけなので、PALが何に移植されていたのかはわかりません。
 
 ## ランタイム機能呼び出しの手段
 
@@ -563,9 +564,7 @@ FCIMPLEND
 
 この例では、対象のSystem.Stringインスタンス(つまり文字列のthis)は、str引数で参照されますが、これは生ポインタです。つまりFCallなら、ガベージコレクタがインスタンスを移動したり回収したりする心配をすることなく、生ポインタを直接操作することが出来ます。
 
-インデクサアクセスは、上記の通りO(1)です。FCallではガベージコレクタが動かないと言っても、ネイティブコードのサイズは小さいため、処理中にそのタイミングが重なる可能性はかなり低いと思われます。
-
-もし、FCallで呼び出されたメソッドが長時間の処理を必要とする場合は、途中で(問題ないタイミングで)一時的にガベージコレクションを行わせることができます。この事をGCポーリングと呼びます。
+インデクサアクセスは、上記の通りO(1)です。FCallではガベージコレクタが動かないと言っても、コードのサイズは小さいため、処理中にそのタイミングが重なる可能性はかなり低いと思われます。もし、FCallで呼び出されたメソッドが長時間の処理を必要とする場合は、途中で(問題ないタイミングで)一時的にガベージコレクションを行わせることができます。この事をGCポーリングと呼びます(上記コードでは使用していません。ここでは詳細を省きます)。
 
 FCallとQCallの使い分けについての決定的な差は、上記の通り、ガベージコレクション操作とマーシャリングの影響を最小限に抑えたいかどうかが、判断の基準となります。あるいは、非常に密接にCLRの内部操作と連携する必要がある場合(その間にガベージコレクションが実行されては困る場合)にも、FCallを使うことがあります。
 
